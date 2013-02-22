@@ -16,11 +16,12 @@ namespace MQC_Service
         public Frm_Setting()
         {
             InitializeComponent();
+            
         }
 
         private void Frm_Setting_Load(object sender, EventArgs e)
         {
-            Initialize_Form_Value();            
+            Initialize_Form_Value();
         }
 
         private void Initialize_Form_Value()

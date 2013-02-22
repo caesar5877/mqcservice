@@ -180,10 +180,10 @@
   </wsdl:binding>
   <wsdl:service name="MQC_WebService">
     <wsdl:port name="MQC_WebServiceSoap" binding="tns:MQC_WebServiceSoap">
-      <soap:address location="http://localhost/MQC_Webservice/MQC_WebService.asmx" />
+      <soap:address location="http://192.168.1.88/MQC_Webservice/MQC_WebService.asmx" />
     </wsdl:port>
     <wsdl:port name="MQC_WebServiceSoap12" binding="tns:MQC_WebServiceSoap12">
-      <soap12:address location="http://localhost/MQC_Webservice/MQC_WebService.asmx" />
+      <soap12:address location="http://192.168.1.88/MQC_Webservice/MQC_WebService.asmx" />
     </wsdl:port>
   </wsdl:service>
 </wsdl:definitions>

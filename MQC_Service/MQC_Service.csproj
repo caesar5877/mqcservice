@@ -92,6 +92,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DataAccess.cs" />
+    <Compile Include="DownFile.cs" />
     <Compile Include="Frm_Setting.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -149,10 +150,10 @@
     <WebReferences Include="Web References\" />
   </ItemGroup>
   <ItemGroup>
-    <WebReferenceUrl Include="http://localhost/MQC_Webservice/MQC_WebService.asmx">
-      <UrlBehavior>Dynamic</UrlBehavior>
+    <WebReferenceUrl Include="http://192.168.1.88/MQC_Webservice/MQC_WebService.asmx">
+      <UrlBehavior>Static</UrlBehavior>
       <RelPath>Web References\MQCWS\</RelPath>
-      <UpdateFromURL>http://localhost/MQC_Webservice/MQC_WebService.asmx</UpdateFromURL>
+      <UpdateFromURL>http://192.168.1.88/MQC_Webservice/MQC_WebService.asmx</UpdateFromURL>
       <ServiceLocationURL>
       </ServiceLocationURL>
       <CachedDynamicPropName>
