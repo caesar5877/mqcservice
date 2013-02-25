@@ -12,8 +12,6 @@ namespace MQC_Service
 {
     public class DownFile
     {
-        #region fields
-        //private string LogFile;
 
         private string server;
         private string user;
@@ -33,23 +31,27 @@ namespace MQC_Service
         private IPEndPoint data_ipEndPoint;
         private FileStream file;
         private int response;
-        private string bucket; 
-        #endregion
+        private string bucket;
 
-        #region Constructor
+        private string[] filesNameList;
+
         public DownFile()
         {
             ftpInit();
             ftpParamentSet();
         }
-        #endregion
 
-        #region Init
         private void ftpParamentSet()
         {
-            server = "31.170.160.96";
-            user = "a6552046";
-            pass = "qinghua24#";
+            
+            server = "192.168.1.88";
+            user = "kevingu";
+            pass = "kevingu0618";
+            /*
+           server = "31.170.160.96";
+           user = "a6552046";
+           pass = "qinghua24#";
+            * */
             port = 21;
             timeout = 1000;
             pasvMode = false;
@@ -67,29 +69,102 @@ namespace MQC_Service
             bucket = "";
             bytesTotal = 0;
             messages = "";
-        }
-        #endregion
 
-        #region ftpDownFile
-        public void ftpDownFile(string sFile, string tFile, string sPath)
+            filesNameList = null;
+        }
+
+
+        public void testFunc()
         {
-            try
+            /*
+            OpenDownload(@"/public_html/temp.pdf", @"c:/temp.pdf", true);
+
+            while (DoDownload()>0)
             {
-                OpenDownload(sFile, tFile, true);
+            }
+            Disconnect();
+            */
+            getList(@"/");
+            for (int i = 0; i < filesNameList.Length;i++ )
+            {
+                string srcFile = @"/" + filesNameList[i];
+                string localFile = @"c:/tmpsss/" + filesNameList[i];
+                OpenDownload(srcFile, localFile, true);
                 while (DoDownload() > 0)
                 {
                 }
-                writeLog("Download " + sFile + " done");
+                DeleteRemoteFile(srcFile);
+                Disconnect();
             }
-            catch (Exception ex)
-            {
-                writeLog("Download" + sFile + " fail, reason:" + ex.Message.Replace("\n", " "));
-            }
-            Disconnect();
         }
-        #endregion
 
-        #region OpenDownload
+        private void DeleteRemoteFile(string filename)
+        {
+            //Connect();
+            SendCommand("DELE " + filename);
+            ReadResponse();
+            if (response == 550)
+            {
+                writeLog(filename + " Not Exist!");
+                return;
+            }
+            else if (response != 213)
+            {
+                writeLog(responseStr.Replace("\n", " "));
+                return;
+            }
+        }
+
+        public int getList(string folderPath)
+        {
+            Connect();
+            SetBinaryMode(true);
+            OpenDataSocket();
+            SendCommand("NLST "+folderPath);
+            ReadResponse();
+            //writeLog(responseStr);
+            ConnectDataSocket();
+
+            int tempCount = 0;
+            StringBuilder sb = new StringBuilder();
+            ArrayList al = new ArrayList();
+            int bufferSize = 1024;
+            int count = 0;
+            do
+            {
+                byte[] tempBuf = new byte[bufferSize];
+                count = dataSock.Receive(tempBuf);
+                tempCount += count;
+                byte[] recvBuf = new byte[count];
+                Buffer.BlockCopy(tempBuf, 0, recvBuf, 0, count);
+                al.Add(recvBuf);
+
+
+            } while (count == bufferSize);
+
+            byte[] revBuf = new byte[tempCount];
+
+            count = 0;
+            for (int i = 0; i < al.Count; i++)
+            {
+                byte[] item = (byte[])al[i];
+                item.CopyTo(revBuf, count);
+                count += item.Length;
+            }
+            string context = Encoding.UTF8.GetString(revBuf);
+            //writeLog(context);
+
+            filesNameList = context.Split(new char[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            writeLog(filesNameList.Length + "");
+            Disconnect();
+
+            for (int i = 0; i < filesNameList.Length; i++)
+            {
+                writeLog("filesNameList[" + i + "]-->" + filesNameList[i]);
+            }
+            return filesNameList.Length;
+        }
+
         public void OpenDownload(string remoteFileName, string local_filename, bool resume)
         {
             Connect();
@@ -153,37 +228,66 @@ namespace MQC_Service
                     writeLog(responseStr.Replace("\n", " "));
                     return;
             }
+            
             ConnectDataSocket();
 
-            return;
+            //return;
         }
-        #endregion
 
-        #region ConnectDataSocket
-        private void ConnectDataSocket()
+        public long DoDownload()
         {
-            if (dataSock != null)        
-                return;
+            Byte[] bytes = new Byte[512];
+            long bytes_got;
 
             try
             {
-                dataSock = listening_sock.Accept();
-                listening_sock.Close();
-                listening_sock = null;
+                bytes_got = dataSock.Receive(bytes, bytes.Length, 0);
 
-                if (dataSock == null)
+                if (bytes_got <= 0)
                 {
-                    writeLog("Winsock " + Convert.ToString(System.Runtime.InteropServices.Marshal.GetLastWin32Error()));
+                    
+                    ReadResponse();
+                    switch (response)
+                    {
+                        case 226:
+                        case 250:
+                            break;
+                        default:
+                            {
+                                writeLog(responseStr.Replace("\n", " "));
+                                return -1;
+                            }
+                    }
+
+                    CloseDataSocket();
+                    file.Close();
+                    file = null;
+
+                    SetBinaryMode(false);
+
+                    return bytes_got;
+
                 }
+
+                file.Write(bytes, 0, (int)bytes_got);
+                bytesTotal += bytes_got;
             }
             catch (Exception ex)
             {
-                writeLog("No connect" + ex.Message.Replace("\n", " "));
+                CloseDataSocket();
+                file.Close();
+                file = null;
+                ReadResponse();
+                SetBinaryMode(false);
+                
+                writeLog(ex.Message.Replace("\n", " "));
+                return -1;
             }
-        }
-        #endregion
 
-        #region Disconnect
+            return bytes_got;
+        }
+
+
         private void Fail()
         {
             Disconnect();
@@ -223,9 +327,29 @@ namespace MQC_Service
 
             data_ipEndPoint = null;
         }
-        #endregion
 
-        #region OpenDataSocket
+        private void ConnectDataSocket()
+        {
+            if (dataSock != null)
+                return;
+
+            try
+            {
+                dataSock = listening_sock.Accept();
+                listening_sock.Close();
+                listening_sock = null;
+
+                if (dataSock == null)
+                {
+                    writeLog("Winsock " + Convert.ToString(System.Runtime.InteropServices.Marshal.GetLastWin32Error()));
+                }
+            }
+            catch (Exception ex)
+            {
+                writeLog("No connect" + ex.Message.Replace("\n", " "));
+            }
+        }
+
         private void OpenDataSocket()
         {
             if (pasvMode)
@@ -315,7 +439,7 @@ namespace MQC_Service
                     }
                     int nPort = int.Parse(sLocAddr.Substring(ix + 1));
 
-                    
+
                     listening_sock.Listen(1);
                     string sPortCmd = string.Format("PORT {0},{1},{2}", sIPAddr.Replace('.', ','), nPort / 256, nPort % 256);
                     SendCommand(sPortCmd);
@@ -330,72 +454,103 @@ namespace MQC_Service
                 }
             }
         }
-  #endregion
 
-        #region FileSize
-        private long GetFileSize(string filename)
+        private bool Connect()
         {
-            Connect();
-            SendCommand("SIZE " + filename);
-            ReadResponse();
-            if (response == 550)
+            if (server == null)
             {
-                writeLog(filename + " Not Exist!");
-                return 0;
+                writeLog("No Ftp Server!");
             }
-            else if (response != 213)
+            if (user == null)
             {
-                writeLog(responseStr.Replace("\n", " "));
-                return 0;
+                writeLog("No Ftp Server!");
             }
-            else
-            {
-                return Int64.Parse(responseStr.Substring(4));
-            }
-        }
-        #endregion
 
-        private void GetFileCnt()
-        {
-            SendCommand("LIST /");
-            ReadResponse();
-            writeLog(responseStr+"..");
-        }    
+            if (mainSock != null)
+                if (mainSock.Connected)
+                    return true;
 
-        #region DeleteRemoteFile
-        private void DeleteRemoteFile(string filename)
-        {
-            Connect();
-            SendCommand("DELE " + filename);
-            ReadResponse();
-            if (response == 550)
+            try
             {
-                writeLog(filename + " Not Exist!");
-                return;
-            }
-            else if (response != 213)
-            {
-                writeLog(responseStr.Replace("\n", " "));
-                return;
-            }
-        }
-        #endregion
 
-        #region BinaryMode
-        private void SetBinaryMode(bool mode)
-        {
-            if (mode)
-                SendCommand("TYPE I");
-            else
-                SendCommand("TYPE A");
+                mainSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+#if NET1
+                mainIpEndPoint = new IPEndPoint(Dns.GetHostByName(server).AddressList[0], port);
+#else
+                mainIpEndPoint = new IPEndPoint(System.Net.Dns.GetHostEntry(server).AddressList[0], port);
+#endif
+
+                mainSock.Connect(mainIpEndPoint);
+            }
+            catch (Exception ex)
+            {
+                writeLog(ex.Message.Replace("\n", " "));
+                return false;
+            }
 
             ReadResponse();
-            if (response != 200)
+
+            if (response != 220)
                 Fail();
-        }
-        #endregion
 
-        #region ReadResponse
+            SendCommand("USER " + user);
+            ReadResponse();
+            switch (response)
+            {
+                case 331:
+                    if (pass == null)
+                    {
+                        Disconnect();
+                        writeLog("No password");
+                        return false;
+                    }
+                    SendCommand("PASS " + pass);
+                    ReadResponse();
+                    if (response != 230)
+                    {
+                        Fail();
+                        return false;
+                    }
+                    break;
+                case 230:
+                    break;
+            }
+
+            return true;
+        }
+
+        private void SendCommand(string command)
+        {
+            Byte[] cmd = Encoding.ASCII.GetBytes((command + "\r\n").ToCharArray());
+
+            if (command.Length > 3 && command.Substring(0, 4) == "PASS")
+                messages = "\rPASS xxx";
+            else
+                messages = "\r" + command;
+
+            try
+            {
+                mainSock.Send(cmd, cmd.Length, 0);
+            }
+            catch (Exception ex)
+            {
+                try
+                {
+                    Disconnect();
+                    writeLog(ex.Message.Replace("\n", " "));
+                    return;
+                }
+                catch
+                {
+                    mainSock.Close();
+                    file.Close();
+                    mainSock = null;
+                    mainIpEndPoint = null;
+                    file = null;
+                }
+            }
+        }
+
         private void ReadResponse()
         {
 
@@ -462,215 +617,40 @@ namespace MQC_Service
                 System.Threading.Thread.Sleep(50);
             }
         }
-        #endregion
 
-        #region SendCommand
-        private void SendCommand(string command)
+        private void SetBinaryMode(bool mode)
         {
-            Byte[] cmd = Encoding.ASCII.GetBytes((command + "\r\n").ToCharArray());
-
-            if (command.Length > 3 && command.Substring(0, 4) == "PASS")
-                messages = "\rPASS xxx";
+            if (mode)
+                SendCommand("TYPE I");
             else
-                messages = "\r" + command;
+                SendCommand("TYPE A");
 
-            try
-            {
-                mainSock.Send(cmd, cmd.Length, 0);
-            }
-            catch (Exception ex)
-            {
-                try
-                {
-                    Disconnect();
-                    writeLog(ex.Message.Replace("\n", " "));
-                    return;
-                }
-                catch
-                {
-                    mainSock.Close();
-                    file.Close();
-                    mainSock = null;
-                    mainIpEndPoint = null;
-                    file = null;
-                }
-            }
-        }
-        #endregion
-
-        #region Connect MainSocket with USER and PASS
-        private bool Connect()
-        {
-            if (server == null)
-            {
-                writeLog("No Ftp Server!");
-            }
-            if (user == null)
-            {
-                writeLog("No Ftp Server!");
-            }
-
-            if (mainSock != null)
-                if (mainSock.Connected)
-                    return true;
-
-            try
-            {
-                
-                mainSock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-#if NET1
-                mainIpEndPoint = new IPEndPoint(Dns.GetHostByName(server).AddressList[0], port);
-#else
-                mainIpEndPoint = new IPEndPoint(System.Net.Dns.GetHostEntry(server).AddressList[0], port);
-#endif
-
-                mainSock.Connect(mainIpEndPoint);
-            }
-            catch (Exception ex)
-            {
-                writeLog(ex.Message.Replace("\n", " "));
-                return false;
-            }
-           
             ReadResponse();
-            
-            if (response != 220)
+            if (response != 200)
                 Fail();
-
-            SendCommand("USER " + user);
-            ReadResponse();
-            switch (response)
-            {
-                case 331:
-                    if (pass == null)
-                    {
-                        Disconnect();
-                        writeLog("No password");
-                        return false;
-                    }
-                    SendCommand("PASS " + pass);
-                    ReadResponse();
-                    if (response != 230)
-                    {
-                        Fail();
-                        return false;
-                    }
-                    break;
-                case 230:
-                    break;
-            }
-
-            return true;
         }
-        #endregion
 
-        #region getFileList from Ftp
-       public string[] getList()
+        private long GetFileSize(string filename)
         {
-            int tempCount = 0;
-            StringBuilder sb = new StringBuilder();
-            ArrayList al = new ArrayList();
-            int bufferSize = 1024;
-            int count = 0;
-            do
+            Connect();
+            SendCommand("SIZE " + filename);
+            ReadResponse();
+            if (response == 550)
             {
-                byte[] tempBuf = new byte[bufferSize];
-                count = dataSock.Receive(tempBuf);
-                tempCount += count;
-                byte[] recvBuf = new byte[count];
-                Buffer.BlockCopy(tempBuf, 0, recvBuf, 0, count);
-                al.Add(recvBuf);
-
-
-            } while (count == bufferSize);
-
-            byte[] revBuf = new byte[tempCount];
-
-            count = 0;
-            for (int i = 0; i < al.Count; i++)
-            {
-                byte[] item = (byte[])al[i];
-                item.CopyTo(revBuf, count);
-                count += item.Length;
+                writeLog(filename + " Not Exist!");
+                return 0;
             }
-            string context = Encoding.UTF8.GetString(revBuf);
-            writeLog1(context);
-            string[] tmp = context.Split(new char[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            int tmpLength = tmp.Length;
-            string[] arrList;
-            if (tmpLength<=2)
+            else if (response != 213)
             {
-                arrList = null;
-                return arrList;
+                writeLog(responseStr.Replace("\n", " "));
+                return 0;
             }
             else
             {
-                arrList = new string[tmpLength - 2];
-                for (int i = tmpLength-1; i > 1;i--)
-                {
-                    arrList[i-2] = tmp[i];
-                }
-                return arrList;
+                return Int64.Parse(responseStr.Substring(4));
             }
         }
-       #endregion
 
-        #region DoDownloadFile
-       public long DoDownload()
-       {
-           Byte[] bytes = new Byte[512];
-           long bytes_got;
-
-           try
-           {
-               bytes_got = dataSock.Receive(bytes, bytes.Length, 0);
-
-               if (bytes_got <= 0)
-               {
-                   
-                   ReadResponse();
-                   switch (response)
-                   {
-                       case 226:
-                       case 250:
-                           break;
-                       default:
-                           {
-                               writeLog(responseStr.Replace("\n", " "));
-                               return -1;
-                           }
-                   }
-
-                   CloseDataSocket();
-                   file.Close();
-                   file = null;
-
-                   SetBinaryMode(false);
-
-                   return bytes_got;
-
-               }
-
-               file.Write(bytes, 0, (int)bytes_got);
-               bytesTotal += bytes_got;
-           }
-           catch (Exception ex)
-           {
-               CloseDataSocket();
-               file.Close();
-               file = null;
-               ReadResponse();
-               SetBinaryMode(false);
-            
-               writeLog(ex.Message.Replace("\n", " "));
-               return -1;
-           }
-
-           return bytes_got;
-       }
-        #endregion
-
-        #region Log file
         public static void writeLog(string mess)
         {
             FileStream fs = new FileStream(@"c:/mcWindowsService.txt", FileMode.OpenOrCreate, FileAccess.Write);
@@ -682,17 +662,63 @@ namespace MQC_Service
             fs.Close();
         }
 
-        public static void writeLog1(string mess)
-        {
-            FileStream fs = new FileStream(@"c:/mc.txt", FileMode.OpenOrCreate, FileAccess.Write);
-            StreamWriter m_streamWriter = new StreamWriter(fs);
-            m_streamWriter.BaseStream.Seek(0, SeekOrigin.End);
-            m_streamWriter.WriteLine(mess);
-            m_streamWriter.Flush();
-            m_streamWriter.Close();
-            fs.Close();
-        }
-        #endregion
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     }
+
+
+   
 }
